@@ -1,0 +1,21 @@
+MakeSynthData = function(XData){
+  ColSample = function(Col){
+    sample(Col,length(Col),replace = T)
+  }
+  SynthData = rbind(XData,apply(XData,2,ColSample))
+  SynthData$Label= as.factor(c(rep(0,nrow(XData)),rep(1,nrow(XData))))
+  return(SynthData)
+}
+
+
+
+library(doParallel)
+library(bigrf)
+registerDoParallel(cores=12)
+tmp.dir.forest1 <- '/tmp/Rforest1'
+
+vars = 1:4
+SynthData = MakeSynthData(iris[-5])
+forest1 = bigrfc(SynthData,SynthData$Label,ntree=5000L, varselect=vars)
+unlink(tmp.dir.forest1, recursive = TRUE)
+varimp(forest1,SynthData[-5])
