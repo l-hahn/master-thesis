@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 import argparse, re
 try:
     from snp import alphabet,animinfo,snpinfo,snp
