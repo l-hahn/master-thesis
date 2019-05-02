@@ -71,7 +71,7 @@ NThread = -1 #all!
 
 
 ###====== MAIN ==============================================================###
-Parser = argparse.ArgumentParser(description='Finds for each SNP the importance via variable importance of unsupervised random forest.')
+Parser = argparse.ArgumentParser(description='Finds for each SNP the importance via variable importance of unsupervised random forest; Calculates per chromosome.')
 Parser.add_argument('--map', metavar='{MAP-File-Name}', type=str, nargs=1, help='Input MAP file, where a subset is taken from', required = True)
 Parser.add_argument('--ped', metavar='{PED-File-Name}', type=str, nargs=1, help='Input PED file, where a subset is taken from', required = True)
 Parser.add_argument('-n', metavar='<Sample-Set-Sizes>', type=float, nargs=1, help='Return the best n*100 \%  SNPs', required = True)
@@ -80,6 +80,7 @@ Parser.add_argument('-t', metavar='<Thread-Number>', type=int, nargs=1, help='Nu
 Parser.add_argument('--omp', metavar='{MAP-Out-Name}', type=str, nargs=1, help='Output-MAP file name', required = False)
 Parser.add_argument('--opd', metavar='{PED-Out-Name}', type=str, nargs=1, help='Output-PED file name', required = False)
 Parser.add_argument('--out', metavar='{Attribut-List}', type=str, nargs=1, help='Attribute importance list file name', required = False)
+Parser.add_argument('--genome', action="store_true", help='Calculate attribute importance on entire genome, not by chromosome', required = False)
 Args = Parser.parse_args()
 if Args.tree:
     NTree = Args.tree[0]
@@ -91,30 +92,70 @@ if Args.opd:
     OutPedFileNameCopy = Args.opd[0]
 if Args.out:
     OutAttrFileNameCopy = Args.out[0]
-
+OnGenome = Args.genome
 SnpPercent = Args.n
 
 
 
 
-
-
+#--- Read SNP -----------------------------------------------------------------#
 SnpList = read_mapped(Args.map[0],Args.ped[0])
-SnpNames = [repr(Snp) for Snp in SnpList]
 
-print("\r[  ] Creating synthetic Data using SNPs for random forest",end="")
-SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SnpList)
-print("\r[OK] Creating synthetic Data using SNPs for random forest")
+if OnGenome:
+    SnpIDs = [repr(Snp) for Snp in SnpList]
 
-print("\r[  ] Performing unsupervised random forest",end="")
-SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread)
-SnpRfSynthClf.fit(SnpSynthRfData, SnpSynthRfLabel)
-print("\r[OK] Performing unsupervised random forest")
+    #--- Make Synthetic Data as mentioned by Leo Breiman for unsup. RF ------------#
+    print("\r[  ] Creating synthetic Data using SNPs for random forest",end="")
+    SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SnpList)
+    print("\r[OK] Creating synthetic Data using SNPs for random forest")
 
-print("\r[  ] Writing important attributes to file, sorted",end="")
-OutAttrFile = open(OutAttrFileNameCopy, "w")
-Importance = sorted( [ (name,importance) for name, importance in zip(SnpNames, SnpRfSynthClf.feature_importances_)], key=lambda x:x[1], reverse = True)
-for Tup in Importance:
-    OutAttrFile.write("{}\t{}\n".format(Tup[0],Tup[1]))
-OutAttrFile.close()
-print("\r[OK] Writing important attributes to file, sorted")
+
+    #--- Perform unsupervised random forest ---------------------------------------#
+    print("\r[  ] Performing unsupervised random forest",end="")
+    SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread)
+    SnpRfSynthClf.fit(SnpSynthRfData, SnpSynthRfLabel)
+    print("\r[OK] Performing unsupervised random forest")
+
+
+
+    #--- Calculate Variable importance and store ----------------------------------#
+    print("\r[  ] Writing important attributes to file, sorted",end="")
+    OutAttrFile = open(OutAttrFileNameCopy, "w")
+    Importance = sorted( [ (ID,importance) for ID, importance in zip(SnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[1], reverse = True)
+    for Tup in Importance:
+        OutAttrFile.write("{}\t{}\n".format(Tup[0],Tup[1]))
+    OutAttrFile.close()
+    print("\r[OK] Writing important attributes to file, sorted")
+
+
+else:
+    SnpChrom = [ Snp.info().chrom_id() for Snp in SnpList ]
+    ChromList = sorted(list(set(SnpChrom)))
+    ChromListLen = len(ChromList)
+    Importance = []
+    for Chrom in ChromList:
+        SubSnpList = [SnpList[Idx] for Idx,Chr in enumerate(SnpChrom) if Chr == Chrom]
+        SubSnpIDs = [repr(Snp) for Snp in SubSnpList]
+        
+        #--- Make Synthetic Data as mentioned by Leo Breiman for unsup. RF ------------#
+        print("\r[  ] Chromosome {}:{} [1/3]: Creating synthetic Data using SNPs for random forest".format(Chrom,ChromListLen),end="")
+        SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SubSnpList)
+
+        #--- Perform unsupervised random forest ---------------------------------------#
+        print("\r{}\r".format(" "*81),end="")
+        print("\r[  ] Chromosome {}:{} [2/3]: Performing unsupervised random forest".format(Chrom,ChromListLen),end="")
+        SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread)
+        SnpRfSynthClf.fit(SnpSynthRfData, SnpSynthRfLabel)
+
+        print("\r{}\r".format(" "*81),end="")
+        print("\r[  ] Chromosome {}:{} [3/3] Calculating and storing attribute importance".format(Chrom,ChromListLen),end="")
+        SubImportance = sorted( [ (ID,Chrom,Importance) for ID, Importance in zip(SubSnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[1], reverse = True)
+        Importance.extend(sorted(SubImportance))
+        print("\r{}\r".format(" "*81),end="")
+        print("\r[OK] Chromosome {}:{} unsupervised RF and attribute importance".format(Chrom,ChromListLen))
+    print("\r[  ] Writing important attributes to file, sorted",end="")
+    OutAttrFile = open(OutAttrFileNameCopy, "w")
+    for Tup in Importance:
+        OutAttrFile.write("{}\t{}\t{}\n".format(Tup[0],Tup[1],Tup[2]))
+    OutAttrFile.close()
+    print("\r[OK] Writing important attributes to file, sorted")
