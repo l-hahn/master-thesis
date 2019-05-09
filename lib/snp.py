@@ -1,4 +1,4 @@
-import math
+import math, re
 
 class slice():
     def __init__(self, ProPortion=0, Item="-"):
@@ -116,7 +116,7 @@ class snpinfo():
         self._SNPID = SnpID
         self._Distance = GenDist
         self._Position = AbsPos
-    def __str__(self, Delimiter="\t"):
+    def __str__(self, Delimiter=" "):
         if type(Delimiter) != str:
             Delimiter = str(Delimiter)
         return str(self._ChromosomeID) + Delimiter + str(self._SNPID) \
@@ -124,6 +124,17 @@ class snpinfo():
                 + str(self._Position)
     def __repr__(self):
         return repr(self._SNPID)
+
+    def __eq__(self, other):
+        return self._SNPID == other._SNPID
+    def __lt__(self, other):
+        return self._Position < other._Position
+    def __le__(self, other):
+        return self._Position <= other._Position
+    def __ge__(self, other):
+        return self._Position > other._Position
+    def __gt__(self, other):
+        return self._Position >= other._Position
 
     def chrom_id(self):
         return self._ChromosomeID
@@ -162,6 +173,17 @@ class snp():
     def __setitem__(self,Idx,DiNu):
         self._DiNuList[Idx] = DiNu
 
+    def __eq__(self, other):
+        return self._SnpInfo == other._SnpInfo
+    def __lt__(self, other):
+        return self._SnpInfo < other._SnpInfo
+    def __le__(self, other):
+        return self._SnpInfo <= other._SnpInfo
+    def __ge__(self, other):
+        return self._SnpInfo > other._SnpInfo
+    def __gt__(self, other):
+        return self._SnpInfo >= other._SnpInfo
+
     def info(self):
         return self._SnpInfo
 
@@ -179,3 +201,59 @@ class snp():
         self._DiNuList.clear()
     def count(self, DiNu):
         self._DiNuList.count(DiNu)
+
+    def read_mapped(InMap, InPed, Verbose = False):
+        MapList = []
+        PedList = []
+        MapLineCount = 0
+        PedLineCount = 0
+
+        InMapFile = open(InMap,"r")
+        if Verbose: print("\r[  ] Processing MAP-File",end="")
+        for idx,Line in enumerate(InMapFile):
+            if Verbose: print("\r[  ] Processing MAP-File: line {}".format(idx),end="")
+            Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+            if len(Entries) != 4 and Verbose:
+                print("!!WARNING!! Line {} in MAP-File has to many entries!\n".format(idx)+Line)
+            MapList.append(snpinfo(int(Entries[0]),Entries[1],int(Entries[2]),int(Entries[3])))
+            MapLineCount += 1
+        if Verbose: print("\r{}\r[OK] Processing MAP-File".format(" "*80))
+        InMapFile.close()
+
+        SnpList = [snp(SnpInfo) for SnpInfo in MapList]
+        del MapList
+
+        InPedFile = open(InPed,"r")
+        if Verbose: print("\r[  ] Processing PED-File",end="")
+        for adx,Line in enumerate(InPedFile):
+            if Verbose: print("\r[  ] Processing PED-File: line {}".format(adx),end="")
+            Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+            if (len(Entries)-6)/2 != MapLineCount and Verbose:
+                print("!!WARNING!! Line {} has a different amount({}) of snps than required({})!".format(adx,(len(Entries)-6)/2,MapLineCount))
+                continue
+            PedList.append(animinfo(Entries[0],Entries[1],Entries[2],Entries[3],Entries[4],Entries[5]))
+            for idx,jdx in enumerate(range(6,len(Entries),2)):
+                SnpList[idx].append(alphabet.encode("{}{}".format(Entries[jdx],Entries[jdx+1])))
+            PedLineCount += 1 
+        if Verbose: print("\r{}\r[OK] Processing PED-File".format(" "*80))
+        InPedFile.close()
+        return SnpList, PedList
+
+    def write_mapped(SnpList, PedList, OutMap, OutPed, Verbose = False):
+        if Verbose: print("\r[  ] Writing Output-MAP-File (target: {})".format(OutMap),end="")
+        OutMapFile = open(OutMap,"w")
+        for Snp in SnpList:
+            OutMapFile.write(str(Snp.info())+"\n")
+        OutMapFile.close()
+        if Verbose: print("\r[OK] Writing Output-MAP-File (target: {})".format(OutMap))
+
+        if Verbose: print("\r[  ] Writing Output-PED-File (target: {})".format(OutPed),end="")
+        OutPedFile = open(OutPed,"w")
+        for idx,AnimInfo in enumerate(PedList):
+            OutPedFile.write(str(AnimInfo))
+            for Snp in SnpList:
+                DiNu = alphabet.decode(Snp[idx])
+                OutPedFile.write(" {} {}".format(DiNu[0],DiNu[1]))
+            OutPedFile.write("\n")
+        OutPedFile.close()
+        if Verbose: print("\r[OK] Writing Output-PED-file (target: {})".format(OutPed))
