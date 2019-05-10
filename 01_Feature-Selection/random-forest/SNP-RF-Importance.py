@@ -26,9 +26,7 @@ def BuildSnpUnsupRfData(SnpData):
 
 
 ###====== VARIABLES =========================================================###
-OutMapFileNameCopy = "data.map"
-OutPedFileNameCopy = "data.ped"
-OutAttrFileNameCopy = "data.attr"
+OutFilePrefix = "data"
 
 NTree = 500
 NThread = -1 #all!
@@ -39,27 +37,24 @@ NThread = -1 #all!
 
 ###====== MAIN ==============================================================###
 Parser = argparse.ArgumentParser(description='Finds for each SNP the importance via variable importance of unsupervised random forest; Calculates per chromosome.')
-Parser.add_argument('--map', metavar='{MAP-File-Name}', type=str, nargs=1, help='Input MAP file, where a subset is taken from', required = True)
-Parser.add_argument('--ped', metavar='{PED-File-Name}', type=str, nargs=1, help='Input PED file, where a subset is taken from', required = True)
+Parser.add_argument('--file', metavar='{MAP-File-Name}', type=str, nargs=1, help='Input file prefix for <file>.map and <file>.ped, where a subset is taken from', required = True)
 Parser.add_argument('-n', metavar='<Sample-Set-Sizes>', type=float, nargs=1, help='Return the best n\% SNPs (per chromosome/genome)', required = True)
 Parser.add_argument('--tree', metavar='<Tree-Number>', type=int, nargs=1, help='Number of Trees used for random forest, default tree = {}'.format(NTree), required = False)
 Parser.add_argument('-t', metavar='<Thread-Number>', type=int, nargs=1, help='Number threads to be used for the random forest, default tree = {} (all)'.format(NThread), required = False)
-Parser.add_argument('--omp', metavar='{MAP-Out-Name}', type=str, nargs=1, help='Output-MAP file name', required = False)
-Parser.add_argument('--opd', metavar='{PED-Out-Name}', type=str, nargs=1, help='Output-PED file name', required = False)
-Parser.add_argument('--out', metavar='{Attribut-List}', type=str, nargs=1, help='Attribute importance list file name', required = False)
+Parser.add_argument('--omp', metavar='{MAP-Out-Name}', type=str, nargs=1, help='Output file name for <omp>.map and <omp>.ped for the n\% most important SNPs, default out = data.*', required = False)
+Parser.add_argument('--out', metavar='{Attribut-List}', type=str, nargs=1, help='Attribute importance list file name, default out = <file>.attr', required = False)
 Parser.add_argument('--genome', action="store_true", help='Calculate attribute importance on entire genome, not by chromosome', required = False)
 Parser.add_argument('--enc', action="store_true", help='Each SNP will be additive encoded (0/1/2).', required = False)
 Args = Parser.parse_args()
+OutAttrFile = Args.file[0]+".attr"
 if Args.tree:
     NTree = Args.tree[0]
 if Args.t:
     NThread = Args.t[0]
 if Args.omp:
-    OutMapFileNameCopy = Args.omp[0]
-if Args.opd:
-    OutPedFileNameCopy = Args.opd[0]
+    OutFilePrefix = Args.omp[0]
 if Args.out:
-    OutAttrFileNameCopy = Args.out[0]
+    OutAttrFile = Args.out[0]
 OnGenome = Args.genome
 EncodeAdditive = Args.enc
 
@@ -69,7 +64,7 @@ EncodeAdditive = Args.enc
 
 
 #--- Read SNP -----------------------------------------------------------------#
-SnpList, PedList = snp.read_mapped(Args.map[0],Args.ped[0], EncodeAdd = EncodeAdditive, Verbose=True)
+SnpList, PedList = snp.read_mapped(Args.file[0]+".map",Args.file[0]+".ped", EncodeAdd = EncodeAdditive, Verbose=True)
 TopSnpPerc = max(min(Args.n[0],0),1)
 TopImpSnps = []
 
@@ -92,7 +87,7 @@ if OnGenome:
 
     #--- Calculate Variable importance and store ----------------------------------#
     print("\r[  ] Writing important attributes to file, sorted",end="")
-    OutAttrFile = open(OutAttrFileNameCopy, "w")
+    OutAttrFile = open(OutAttrFile, "w")
     Importance = sorted( [ (ID,importance) for ID, importance in zip(SnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[1], reverse = True)
     TopImpSnps = [ SnpList[ SnpIDs.index(SnpID[0]) ] for SnpID in Importance[1:round(TopSnpPerc*len(Importance))]]
     for Tup in Importance:
@@ -128,11 +123,11 @@ else:
         print("\r{}\r".format(" "*81),end="")
         print("\r[OK] Chromosome {}:{} unsupervised RF and attribute importance".format(Chrom,ChromListLen))
     print("\r[  ] Writing important attributes to file, sorted",end="")
-    OutAttrFile = open(OutAttrFileNameCopy, "w")
+    OutAttrFile = open(OutAttrFile, "w")
     for Tup in Importance:
         OutAttrFile.write("{}\t{}\t{}\n".format(Tup[0],Tup[1],Tup[2]))
     OutAttrFile.close()
     print("\r[OK] Writing important attributes to file, sorted")
 
 TopImpSnps = sorted(TopImpSnps, key=lambda x:(x.info().chrom_id(),x.info().position()))
-snp.write_mapped(TopImpSnps, PedList, OutMapFileNameCopy, OutPedFileNameCopy, Verbose = True)
+snp.write_mapped(TopImpSnps, PedList, OutFilePrefix+".map", OutFilePrefix+".ped", Verbose = True)

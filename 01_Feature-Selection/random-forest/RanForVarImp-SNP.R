@@ -57,7 +57,7 @@ AlphabetEncoderSym = function(Data){
   return(Encoder[[Data]])
 }
 
-setwd("~/Schreibtisch/master-data/tuberculosis-data/")
+setwd("~/Schreibtisch/Master/master-data/tuberculosis-data/")
 data = read.table("tuberculosis_sample1000.ped")
 MAP = read.table("tuberculosis_sample1000.map")
 #data = read.table("simdata.ped")
