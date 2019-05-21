@@ -1,4 +1,4 @@
-import math, re
+import math, re, os, subprocess
 from collections import Counter
 from itertools import combinations_with_replacement as combinations
 
@@ -207,6 +207,14 @@ class snp():
     def conservation(self):
         return max(Counter(self._DiNuList).values())
 
+    def has_plink():
+        try:
+            subprocess.Popen(["plink"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True).communicate()
+        except OSError as Except:
+            if Except.errno == os.errno.ENOENT:
+                return False
+        return True
+
     def encode_additive(self):
         if not self._EncodeAdd:
             self._EncodeAdd = True
@@ -216,67 +224,144 @@ class snp():
                 GenoStr = alphabet.decode(Genotyp)
                 Alleles[GenoStr[0]] += GenotypesCount[Genotyp]
                 Alleles[GenoStr[1]] += GenotypesCount[Genotyp]
-            self._Alleles = [ Counts[0] for Counts in sorted(Alleles.items(), key=lambda kv:kv[1], reverse=True) if Counts[1] > 0 ]
+            self._Alleles = [ Counts[0] for Counts in sorted(Alleles.items(), key=lambda kv:kv[1], reverse=True) if Counts[1] > 0 and Counts[0] != '0']
             Genotypes = ["".join(Genotype) for Genotype in combinations(self._Alleles,2)]
             GenotypesEncoder = {alphabet.encode(Genotype):idx for idx,Genotype in enumerate(Genotypes)}
+            if Alleles['0'] != 0:
+                GapEncoder = { alphabet.encode(Genotype):-1 for Genotype in [ Allele+"0" for Allele in self._Alleles+['0']]}
+                GenotypesEncoder = {**GenotypesEncoder, **GapEncoder}
             GenotypesEncoder = {**GenotypesEncoder, **{ alphabet.encode(Genotype[::-1]):GenotypesEncoder[alphabet.encode(Genotype)] for Genotype in Genotypes }}
             self._DiNuList = [ GenotypesEncoder[Genotype] for Genotype in self._DiNuList ]
 
-    def read_mapped(InMap, InPed, EncodeAdd = False , Verbose = False):
+    def read_mapped(InFile, EncodeAdd = False , Verbose = False):
         MapList = []
-        PedList = []
+        FamList = []
         MapLineCount = 0
         PedLineCount = 0
 
-        InMapFile = open(InMap,"r")
-        if Verbose: print("\r[  ] Processing MAP-File",end="")
-        for idx,Line in enumerate(InMapFile):
-            if Verbose: print("\r[  ] Processing MAP-File: line {}".format(idx),end="")
-            Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
-            if len(Entries) != 4 and Verbose:
-                print("!!WARNING!! Line {} in MAP-File has to many entries!\n".format(idx)+Line)
-            MapList.append(snpinfo(int(Entries[0]),Entries[1],int(Entries[2]),int(Entries[3])))
-            MapLineCount += 1
-        if Verbose: print("\r{}\r[OK] Processing MAP-File".format(" "*80))
-        InMapFile.close()
+        if not snp.has_plink():
+            if Verbose: print("\r[NO] Running PLINK for data transposition")
+            if Verbose: print("\r[  ] Processing MAP-File",end="")
+            InMapFile = open(InFile+".map","r")
+            for idx,Line in enumerate(InMapFile):
+                if Verbose: print("\r[  ] Processing MAP-File: line {}".format(idx),end="")
+                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+                if len(Entries) != 4 and Verbose:
+                    print(" !!WARNING!! Line {} in MAP-File has to many entries!\n".format(idx)+Line)
+                MapList.append(snpinfo(int(Entries[0]),Entries[1],int(Entries[2]),int(Entries[3])))
+                MapLineCount += 1
+            InMapFile.close()
+            if Verbose: print("\r{}\r[OK] Processing MAP-File".format(" "*80))
 
-        SnpList = [snp(SnpInfo) for SnpInfo in MapList]
-        del MapList
+            SnpList = [snp(SnpInfo) for SnpInfo in MapList]
+            del MapList
 
-        InPedFile = open(InPed,"r")
-        if Verbose: print("\r[  ] Processing PED-File",end="")
-        for adx,Line in enumerate(InPedFile):
-            if Verbose: print("\r[  ] Processing PED-File: line {}".format(adx),end="")
-            Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
-            if (len(Entries)-6)/2 != MapLineCount and Verbose:
-                print("!!WARNING!! Line {} has a different amount({}) of snps than required({})!".format(adx,(len(Entries)-6)/2,MapLineCount))
-                continue
-            PedList.append(animinfo(Entries[0],Entries[1],Entries[2],Entries[3],Entries[4],Entries[5]))
-            for idx,jdx in enumerate(range(6,len(Entries),2)):
-                SnpList[idx].append(alphabet.encode("{}{}".format(Entries[jdx],Entries[jdx+1])))
-            PedLineCount += 1 
-        if Verbose: print("\r{}\r[OK] Processing PED-File".format(" "*80))
-        InPedFile.close()
-        if EncodeAdd:
-            for idx in range(len(SnpList)):
-                SnpList[idx].encode_additive()
-        return SnpList, PedList
+            if Verbose: print("\r[  ] Processing PED-File",end="")
+            InPedFile = open(InFile+".ped","r")
+            for adx,Line in enumerate(InPedFile):
+                if Verbose: print("\r[  ] Processing PED-File: line {}".format(adx),end="")
+                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+                if (len(Entries)-6)/2 != MapLineCount and Verbose:
+                    print(" !!WARNING!! Line {} has a different amount({}) of snps than required({})!".format(adx,(len(Entries)-6)/2,MapLineCount))
+                    continue
+                FamList.append(animinfo(Entries[0],Entries[1],Entries[2],Entries[3],Entries[4],Entries[5]))
+                for idx,jdx in enumerate(range(6,len(Entries),2)):
+                    SnpList[idx].append(alphabet.encode("{}{}".format(Entries[jdx],Entries[jdx+1])))
+                PedLineCount += 1 
+            if Verbose: print("\r{}\r[OK] Processing PED-File".format(" "*80))
+            InPedFile.close()
+            if EncodeAdd:
+                for idx in range(len(SnpList)):
+                    SnpList[idx].encode_additive()
+            return SnpList, FamList
 
-    def write_mapped(SnpList, PedList, OutMap, OutPed, Verbose = False):
-        if Verbose: print("\r[  ] Writing Output-MAP-File (target: {})".format(OutMap),end="")
-        OutMapFile = open(OutMap,"w")
+        else:
+            if Verbose: print("\r[  ] Running PLINK for data transposition",end="")
+            subprocess.Popen(["cp",InFile+".map",InFile+"_copy.map"]).communicate()
+            InMapFile = open(InFile+".map","r")
+            for Line in InMapFile:
+                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+                if len(Entries) != 4 and Verbose:
+                    print(" !!WARNING!! Line {} in MAP-File has to many entries!\n".format(idx)+Line)
+                MapList.append(snpinfo(int(Entries[0]),Entries[1],int(Entries[2]),int(Entries[3])))
+            InMapFile.close()
+
+            SnpList = [snp(SnpInfo) for SnpInfo in MapList]
+            del MapList
+
+            OutMapFile = open(InFile+".map","w")
+            for Snp in SnpList:
+                Snp.info().set_chrom_id(0)
+                OutMapFile.write(str(Snp.info())+"\n")
+            OutMapFile.close()
+
+            subprocess.Popen(["plink", "--file" , InFile, "--recode", "transpose","--allow-no-sex", "--out", InFile], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()            
+            if Verbose: print("\r[OK] Running PLINK for data transposition")
+
+            if Verbose: print("\r[  ] Processing TFAM-File",end="")
+            InTfamFile = open(InFile+".tfam","r")
+            for adx,Line in enumerate(InTfamFile):
+                if Verbose: print("\r[  ] Processing TFAM-File: line {}".format(adx),end="")
+                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+                if len(Entries) != 6 and Verbose:
+                    print(" !!WARNING!! Line {} in TFAM-File has wrong entry number!\n".format(idx)+Line)
+                FamList.append(animinfo(Entries[0],Entries[1],Entries[2],Entries[3],Entries[4],Entries[5]))
+                PedLineCount += 1
+            InTfamFile.close()
+            if Verbose: print("\r{}\r[OK] Processing TFAM-File".format(" "*80))
+
+            if Verbose: print("\r[  ] Processing TPED-File",end="")
+            InTpedFile = open(InFile+".tped","r")
+            for adx,Line in enumerate(InTpedFile):
+                #if Verbose: print("\r[  ] Processing TPED-File: line {}".format(adx),end="")
+                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+                if (len(Entries)-4)/2 != PedLineCount and Verbose:
+                    print(" !!WARNING!! Line {} has a different amount({}) of genotpyes than required({})!".format(adx,(len(Entries)-4)/2,PedLineCount))
+                    continue
+                SnpList[adx].extend( [ alphabet.encode("{}{}".format(Entries[idx],Entries[idx+1])) for idx in range(4,len(Entries),2) ] )
+            InTpedFile.close()
+            if Verbose: print("\r{}\r[OK] Processing TPED-File".format(" "*80))
+
+            if Verbose: print("\r[  ] Removing data from PLINK transposition",end="")
+            subprocess.Popen(["mv",InFile+"_copy.map",InFile+".map"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()
+            subprocess.Popen(["rm" , InFile+".tfam",InFile+".tped"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()            
+            if Verbose: print("\r[OK] Removing data from PLINK transposition")
+            if EncodeAdd:
+                for idx in range(len(SnpList)):
+                    SnpList[idx].encode_additive()
+            return SnpList, FamList
+
+    def write_mapped(SnpList, FamList, OutFile, Verbose = False):
+        if Verbose: print("\r[  ] Writing Output-MAP-File (target: {})".format(OutFile+".map"),end="")
+        OutMapFile = open(OutFile+".map","w")
         for Snp in SnpList:
             OutMapFile.write(str(Snp.info())+"\n")
         OutMapFile.close()
-        if Verbose: print("\r[OK] Writing Output-MAP-File (target: {})".format(OutMap))
+        if Verbose: print("\r[OK] Writing Output-MAP-File (target: {})".format(OutFile+".map"))
 
-        if Verbose: print("\r[  ] Writing Output-PED-File (target: {})".format(OutPed),end="")
-        OutPedFile = open(OutPed,"w")
-        for idx,AnimInfo in enumerate(PedList):
+        if Verbose: print("\r[  ] Writing Output-PED-File (target: {})".format(OutFile+".ped"),end="")
+        OutPedFile = open(OutFile+".ped","w")
+        for idx,AnimInfo in enumerate(FamList):
             OutPedFile.write(str(AnimInfo))
             for Snp in SnpList:
                 DiNu = alphabet.decode(Snp[idx])
                 OutPedFile.write(" {} {}".format(DiNu[0],DiNu[1]))
             OutPedFile.write("\n")
         OutPedFile.close()
-        if Verbose: print("\r[OK] Writing Output-PED-file (target: {})".format(OutPed))
+        if Verbose: print("\r[OK] Writing Output-PED-file (target: {})".format(OutFile+".ped"))
+        
+        """
+        For more output:
+            for Snp in SnpList:
+                if not Bin and not Gen:
+                    DiNu = alphabet.decode(Snp[idx])
+                    OutPedFile.write(" {} {}".format(DiNu[0],DiNu[1]))
+                elif Bin and not Gen:
+                    DiNu = alphabet.decode(Snp[idx])
+                    OutPedFile.write(" {} {}".format(alphabet.enc(DiNu[0]),alphabet.enc(DiNu[1])))
+                elif not Bin and Gen:
+                    DiNu = alphabet.decode(Snp[idx])
+                    OutPedFile.write(" {}".format(DiNu))
+                else:
+                    OutPedFile.write(" {}".format(Snp[idx]))
+        """

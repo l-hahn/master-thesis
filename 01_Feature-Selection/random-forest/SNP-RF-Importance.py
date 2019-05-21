@@ -37,7 +37,7 @@ NThread = -1 #all!
 
 ###====== MAIN ==============================================================###
 Parser = argparse.ArgumentParser(description='Finds for each SNP the importance via variable importance of unsupervised random forest; Calculates per chromosome.')
-Parser.add_argument('--file', metavar='{MAP-File-Name}', type=str, nargs=1, help='Input file prefix for <file>.map and <file>.ped, where a subset is taken from', required = True)
+Parser.add_argument('--file', metavar='{File-Name-Prefix}', type=str, nargs=1, help='Input file prefix for <file>.map and <file>.ped, where a subset is taken from', required = True)
 Parser.add_argument('-n', metavar='<Sample-Set-Sizes>', type=float, nargs=1, help='Return the best n\% SNPs (per chromosome/genome)', required = True)
 Parser.add_argument('--tree', metavar='<Tree-Number>', type=int, nargs=1, help='Number of Trees used for random forest, default tree = {}'.format(NTree), required = False)
 Parser.add_argument('-t', metavar='<Thread-Number>', type=int, nargs=1, help='Number threads to be used for the random forest, default tree = {} (all)'.format(NThread), required = False)
@@ -64,7 +64,7 @@ EncodeAdditive = Args.enc
 
 
 #--- Read SNP -----------------------------------------------------------------#
-SnpList, PedList = snp.read_mapped(Args.file[0]+".map",Args.file[0]+".ped", EncodeAdd = EncodeAdditive, Verbose=True)
+SnpList, PedList = snp.read_mapped(Args.file[0], EncodeAdd = EncodeAdditive, Verbose=True)
 TopSnpPerc = max(min(Args.n[0],0),1)
 TopImpSnps = []
 
@@ -130,4 +130,4 @@ else:
     print("\r[OK] Writing important attributes to file, sorted")
 
 TopImpSnps = sorted(TopImpSnps, key=lambda x:(x.info().chrom_id(),x.info().position()))
-snp.write_mapped(TopImpSnps, PedList, OutFilePrefix+".map", OutFilePrefix+".ped", Verbose = True)
+snp.write_mapped(TopImpSnps, PedList, OutFilePrefix, Verbose = True)
