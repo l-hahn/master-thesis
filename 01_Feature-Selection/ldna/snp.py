@@ -291,8 +291,8 @@ class snp():
 
             OutMapFile = open(InFile+".map","w")
             for Snp in SnpList:
-                Snp.info().set_chrom_id(0)
-                OutMapFile.write(str(Snp.info())+"\n")
+                SnpInfo = snpinfo(1,Snp.info().snp_id(),Snp.info().distance(),Snp.info().position())
+                OutMapFile.write(str(SnpInfo)+"\n")
             OutMapFile.close()
 
             subprocess.Popen(["plink", "--file" , InFile, "--recode", "transpose","--allow-no-sex", "--out", InFile], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()            
