@@ -58,8 +58,8 @@ AlphabetEncoderSym = function(Data){
 }
 
 setwd("~/Schreibtisch/Master/master-data/tuberculosis-data/")
-data = read.table("tuberculosis_sample1000.ped")
-MAP = read.table("tuberculosis_sample1000.map")
+data = read.table("data_1000-snps.ped")
+MAP = read.table("data_1000-snps.map")
 #data = read.table("simdata.ped")
 #MAP = read.table("simdata.map")
 PED = as.data.frame(apply(as.data.frame(t(apply(data[-c(1:6)],1,mypaste)), stringsAsFactors = F),2,AlphabetEncoderSym))
@@ -97,8 +97,8 @@ R_Pos = grep(R_RF_VarImp$ID,pattern = "important")
 R_Bin_Pos = grep(R_RF_Bin_VarImp$ID,pattern = "important")
 Py_Pos = grep(Py_RF_VarImp$ID,pattern = "important")
 Py_Bin_Pos = grep(Py_RF_Bin_VarImp$ID,pattern = "important")
-X_Pos = c(Py_RF_VarImp$MeanDecreaseGini[Py_Pos],
-          Py_RF_Bin_VarImp$MeanDecreaseGini[Py_Bin_Pos],
+X_Pos = c(#Py_RF_VarImp$MeanDecreaseGini[Py_Pos],
+          #Py_RF_Bin_VarImp$MeanDecreaseGini[Py_Bin_Pos],
           R_RF_VarImp$MeanDecreaseGini[R_Pos],
           R_RF_Bin_VarImp$MeanDecreaseGini[R_Bin_Pos]
           )
@@ -106,9 +106,21 @@ ColorScheme = rainbow(4)
 Col = rep(ColorScheme,each=length(R_Pos))
 
 PlotData = data.frame(
-    ID = c(R_RF_VarImp$ID,R_RF_Bin_VarImp$ID,Py_RF_VarImp$ID,Py_RF_Bin_VarImp$ID), 
-    VarImp = c(R_RF_VarImp$MeanDecreaseGini,R_RF_Bin_VarImp$MeanDecreaseGini, Py_RF_VarImp$MeanDecreaseGini,Py_RF_Bin_VarImp$MeanDecreaseGini), 
-    Type=c(rep("R",nrow(R_RF_VarImp)),rep("R-Bin",nrow(R_RF_Bin_VarImp)),rep("Python", nrow(Py_RF_VarImp)),rep("Python-Bin", nrow(Py_RF_Bin_VarImp)))
+    ID = c(R_RF_VarImp$ID,
+           R_RF_Bin_VarImp$ID,
+           #Py_RF_VarImp$ID,
+           #Py_RF_Bin_VarImp$ID
+           ), 
+    VarImp = c(R_RF_VarImp$MeanDecreaseGini,
+               R_RF_Bin_VarImp$MeanDecreaseGini
+               #Py_RF_VarImp$MeanDecreaseGini,
+               #Py_RF_Bin_VarImp$MeanDecreaseGini
+               ), 
+    Type=c(rep("R",nrow(R_RF_VarImp)),
+           rep("R-Bin",nrow(R_RF_Bin_VarImp))
+           #rep("Python", nrow(Py_RF_VarImp)),
+           #rep("Python-Bin", nrow(Py_RF_Bin_VarImp))
+           )
   )
 
 ggplot(data=PlotData, aes(x=VarImp, y=..density..))+geom_density(aes(fill = Type), alpha=0.5)+geom_vline(xintercept = X_Pos,colour=Col)+

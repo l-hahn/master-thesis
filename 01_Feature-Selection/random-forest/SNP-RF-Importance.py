@@ -38,10 +38,10 @@ NThread = -1 #all!
 ###====== MAIN ==============================================================###
 Parser = argparse.ArgumentParser(description='Finds for each SNP the importance via variable importance of unsupervised random forest; Calculates per chromosome.')
 Parser.add_argument('--file', metavar='{File-Name-Prefix}', type=str, nargs=1, help='Input file prefix for <file>.map and <file>.ped, where a subset is taken from', required = True)
-Parser.add_argument('-n', metavar='<Sample-Set-Sizes>', type=float, nargs=1, help='Return the best n\% SNPs (per chromosome/genome)', required = True)
+Parser.add_argument('-n', metavar='<Sample-Set-Sizes>', type=int, nargs=1, help='Return the best n SNPs (per chromosome/genome)', required = True)
 Parser.add_argument('--tree', metavar='<Tree-Number>', type=int, nargs=1, help='Number of Trees used for random forest, default tree = {}'.format(NTree), required = False)
 Parser.add_argument('-t', metavar='<Thread-Number>', type=int, nargs=1, help='Number threads to be used for the random forest, default tree = {} (all)'.format(NThread), required = False)
-Parser.add_argument('--omp', metavar='{MAP-Out-Name}', type=str, nargs=1, help='Output file name for <omp>.map and <omp>.ped for the n\% most important SNPs, default out = data.*', required = False)
+Parser.add_argument('--omp', metavar='{MAP-Out-Name}', type=str, nargs=1, help='Output file name for <omp>.map and <omp>.ped for the n most important SNPs, default out = data.*', required = False)
 Parser.add_argument('--out', metavar='{Attribut-List}', type=str, nargs=1, help='Attribute importance list file name, default out = <file>.attr', required = False)
 Parser.add_argument('--genome', action="store_true", help='Calculate attribute importance on entire genome, not by chromosome', required = False)
 Parser.add_argument('--enc', action="store_true", help='Each SNP will be additive encoded (0/1/2).', required = False)
@@ -65,7 +65,7 @@ EncodeAdditive = Args.enc
 
 #--- Read SNP -----------------------------------------------------------------#
 SnpList, PedList = snp.read_mapped(Args.file[0], EncodeAdd = EncodeAdditive, Verbose=True)
-TopSnpPerc = max(min(Args.n[0],0),1)
+TopSnps = min(max(Args.n[0],1),len(SnpList))
 TopImpSnps = []
 
 if OnGenome:
@@ -89,7 +89,7 @@ if OnGenome:
     print("\r[  ] Writing important attributes to file, sorted",end="")
     OutAttrFile = open(OutAttrFile, "w")
     Importance = sorted( [ (ID,importance) for ID, importance in zip(SnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[1], reverse = True)
-    TopImpSnps = [ SnpList[ SnpIDs.index(SnpID[0]) ] for SnpID in Importance[1:round(TopSnpPerc*len(Importance))]]
+    TopImpSnps = [ SnpList[ SnpIDs.index(SnpID[0]) ] for SnpID in Importance[1:TopSnps]]
     for Tup in Importance:
         OutAttrFile.write("{}\t{}\n".format(Tup[0],Tup[1]))
     OutAttrFile.close()
@@ -104,6 +104,7 @@ else:
     for Chrom in ChromList:
         SubSnpList = [SnpList[Idx] for Idx,Chr in enumerate(SnpChrom) if Chr == Chrom]
         SubSnpIDs = [repr(Snp) for Snp in SubSnpList]
+        SubTopSnps = min(TopSnps,len(SubSnpList))
         
         #--- Make Synthetic Data as mentioned by Leo Breiman for unsup. RF ------------#
         print("\r[  ] Chromosome {}:{} [1/3]: Creating synthetic Data using SNPs for random forest".format(Chrom,ChromListLen),end="")
@@ -117,9 +118,9 @@ else:
 
         print("\r{}\r".format(" "*81),end="")
         print("\r[  ] Chromosome {}:{} [3/3] Calculating and storing attribute importance".format(Chrom,ChromListLen),end="")
-        SubImportance = sorted( [ (ID,Chrom,Importance) for ID, Importance in zip(SubSnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[1], reverse = True)
-        TopImpSnps.extend([ SubSnpList[ SubSnpIDs.index(SnpID[0]) ] for SnpID in SubImportance[1:round(TopSnpPerc*len(SubImportance))]])
-        Importance.extend(sorted(SubImportance))
+        SubImportance = sorted( [ (ID,Chrom,Importance) for ID, Importance in zip(SubSnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[2], reverse = True)
+        TopImpSnps.extend([ SubSnpList[ SubSnpIDs.index(SnpID[0]) ] for SnpID in SubImportance[1:SubTopSnps]])
+        Importance.extend(SubImportance)
         print("\r{}\r".format(" "*81),end="")
         print("\r[OK] Chromosome {}:{} unsupervised RF and attribute importance".format(Chrom,ChromListLen))
     print("\r[  ] Writing important attributes to file, sorted",end="")
