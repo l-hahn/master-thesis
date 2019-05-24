@@ -58,8 +58,8 @@ AlphabetEncoderSym = function(Data){
 }
 
 setwd("~/Schreibtisch/Master/master-data/tuberculosis-data/")
-data = read.table("data_1000-snps.ped")
-MAP = read.table("data_1000-snps.map")
+data = read.table("data_5000-snps.ped")
+MAP = read.table("data_5000-snps.map")
 #data = read.table("simdata.ped")
 #MAP = read.table("simdata.map")
 PED = as.data.frame(apply(as.data.frame(t(apply(data[-c(1:6)],1,mypaste)), stringsAsFactors = F),2,AlphabetEncoderSym))
@@ -107,7 +107,7 @@ Col = rep(ColorScheme,each=length(R_Pos))
 
 PlotData = data.frame(
     ID = c(R_RF_VarImp$ID,
-           R_RF_Bin_VarImp$ID,
+           R_RF_Bin_VarImp$ID
            #Py_RF_VarImp$ID,
            #Py_RF_Bin_VarImp$ID
            ), 
@@ -127,17 +127,17 @@ ggplot(data=PlotData, aes(x=VarImp, y=..density..))+geom_density(aes(fill = Type
   scale_fill_manual( values = ColorScheme)
 
 
-PyP =ggplot(data=NULL, aes(x=reorder(ID,-MeanDecreaseGini),y=MeanDecreaseGini)) + 
-  geom_bar(stat="identity",aes(fill=Py_RF_VarImp$Important,col=Py_RF_VarImp$Important), data=Py_RF_VarImp)+
-  theme(axis.text.x=element_blank())+
-  scale_fill_discrete(name="Snp type", labels=c("Not Associated", "Associated"))+guides(col=FALSE)+
-  labs(title="SNP Variable Importance via RF\nPython alphabet encoded",x="SNPs sorted by Variable importance", y="Normalised mean decrease Gini")
-
-PyBP=ggplot(data=NULL, aes(x=reorder(ID,-MeanDecreaseGini),y=MeanDecreaseGini))+ 
-  geom_bar(stat="identity",aes(fill=Py_RF_Bin_VarImp$Important,col=Py_RF_Bin_VarImp$Important), data=Py_RF_Bin_VarImp)+
-  theme(axis.text.x=element_blank())+
-  scale_fill_discrete(name="Snp type", labels=c("Not Associated", "Associated"))+guides(col=FALSE)+
-  labs(title="SNP Variable Importance via RF\nPython additive encoded",x="SNPs sorted by Variable importance", y="Normalised mean decrease Gini")
+# PyP =ggplot(data=NULL, aes(x=reorder(ID,-MeanDecreaseGini),y=MeanDecreaseGini)) + 
+#   geom_bar(stat="identity",aes(fill=Py_RF_VarImp$Important,col=Py_RF_VarImp$Important), data=Py_RF_VarImp)+
+#   theme(axis.text.x=element_blank())+
+#   scale_fill_discrete(name="Snp type", labels=c("Not Associated", "Associated"))+guides(col=FALSE)+
+#   labs(title="SNP Variable Importance via RF\nPython alphabet encoded",x="SNPs sorted by Variable importance", y="Normalised mean decrease Gini")
+# 
+# PyBP=ggplot(data=NULL, aes(x=reorder(ID,-MeanDecreaseGini),y=MeanDecreaseGini))+ 
+#   geom_bar(stat="identity",aes(fill=Py_RF_Bin_VarImp$Important,col=Py_RF_Bin_VarImp$Important), data=Py_RF_Bin_VarImp)+
+#   theme(axis.text.x=element_blank())+
+#   scale_fill_discrete(name="Snp type", labels=c("Not Associated", "Associated"))+guides(col=FALSE)+
+#   labs(title="SNP Variable Importance via RF\nPython additive encoded",x="SNPs sorted by Variable importance", y="Normalised mean decrease Gini")
 
 RP =ggplot(data=NULL, aes(x=reorder(ID,-MeanDecreaseGini),y=MeanDecreaseGini)) + 
   geom_bar(stat="identity",aes(fill=R_RF_VarImp$Important,col=R_RF_VarImp$Important), data=R_RF_VarImp)+
@@ -151,4 +151,7 @@ RBP =ggplot(data=NULL, aes(x=reorder(ID,-MeanDecreaseGini),y=MeanDecreaseGini))+
   scale_fill_discrete(name="Snp type", labels=c("Not Associated", "Associated"))+guides(col=FALSE)+
   labs(title="SNP Variable Importance via RF\nR additive encoded",x="SNPs sorted by Variable importance", y="Normalised mean decrease Gini")
 
-grid.arrange(PyP,PyBP,RP,RBP)
+grid.arrange(#PyP,
+             #PyBP,
+             RP,
+             RBP)

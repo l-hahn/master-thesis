@@ -165,6 +165,8 @@ class snp():
             self._SnpInfo = snpinfo(0,SnpInfo,0,0)
         self._DiNuList = []
         self._EncodeAdd = False
+        self._AlleleCounted = False
+        self._GenotypesCounted = False
     def __str__(self):
         return str(self._SnpInfo)
     def __repr__(self):
@@ -189,6 +191,8 @@ class snp():
 
     def info(self):
         return self._SnpInfo
+    def is_additive_encoded(self):
+        return self._EncodeAdd
 
     def append(self, DiNu):
         self._DiNuList.append(DiNu)
@@ -205,7 +209,38 @@ class snp():
     def count(self, DiNu):
         self._DiNuList.count(DiNu)
     def conservation(self):
-        return max(Counter(self._DiNuList).values())
+        if not self._GenotypesCounted:
+            self.genotypecount()
+        return max(self._GenotypesCount.values())/len(self)
+    def maf(self):
+        if not self._AlleleCounted:
+            self.allelcount()
+        return min([self._AlleleCount[Allele] for Allele in self._Alleles])/(sum(self._AlleleCount.values()))
+    def entropy(self):
+        return sum([ -Geno/len(self)*math.log2(Geno/len(self)) for Geno in self._GenotypesCount.values() ])
+    def allelcount(self):
+        ReDo = False
+        if self._EncodeAdd:
+            self.decode_additive()
+            ReDo = True
+        if not self._GenotypesCounted:
+            self.genotypecount()
+        Alleles = {'A':0,'C':0,'G':0,'T':0, '0':0}
+        for Genotyp in self._GenotypesCount:
+            GenoStr = alphabet.decode(Genotyp)
+            Alleles[GenoStr[0]] += self._GenotypesCount[Genotyp]
+            Alleles[GenoStr[1]] += self._GenotypesCount[Genotyp]
+        self._AlleleCount = Alleles
+        self._Alleles = [ Counts[0] for Counts in sorted(Alleles.items(), key=lambda kv:kv[1], reverse=True) if Counts[1] > 0 and Counts[0] != '0']
+        self._AlleleCounted = True
+        if ReDo:
+            self.encode_additive()
+        return self._AlleleCount
+    def genotypecount(self):
+        self._GenotypesCount = Counter(self._DiNuList)
+        self._Genotypes = [ Counts[0] for Counts in sorted(self._GenotypesCount.items(), key=lambda kv:kv[1], reverse=True) ]
+        self._GenotypesCounted = True
+        return self._GenotypesCount
 
     def has_plink():
         try:
@@ -217,29 +252,29 @@ class snp():
 
     def encode_additive(self):
         if not self._EncodeAdd:
-            self._EncodeAdd = True
-            Alleles = {'A':0,'C':0,'G':0,'T':0, '0':0}
-            GenotypesCount = Counter(self._DiNuList)
-            for Genotyp in GenotypesCount:
-                GenoStr = alphabet.decode(Genotyp)
-                Alleles[GenoStr[0]] += GenotypesCount[Genotyp]
-                Alleles[GenoStr[1]] += GenotypesCount[Genotyp]
-            self._Alleles = [ Counts[0] for Counts in sorted(Alleles.items(), key=lambda kv:kv[1], reverse=True) if Counts[1] > 0 and Counts[0] != '0']
+            if not self._AlleleCounted:
+                self.allelcount()
             Genotypes = ["".join(Genotype) for Genotype in combinations(self._Alleles,2)]
-            GenotypesEncoder = {alphabet.encode(Genotype):idx for idx,Genotype in enumerate(Genotypes)}
-            if Alleles['0'] != 0:
+            GenotypesEncoder = {alphabet.encode(Genotype):(idx) for idx,Genotype in enumerate(Genotypes)}
+            if self._AlleleCount['0'] != 0:
                 GapEncoder = { alphabet.encode(Genotype):-1 for Genotype in [ Allele+"0" for Allele in self._Alleles+['0']]}
                 GenotypesEncoder = {**GenotypesEncoder, **GapEncoder}
-            GenotypesEncoder = {**GenotypesEncoder, **{ alphabet.encode(Genotype[::-1]):GenotypesEncoder[alphabet.encode(Genotype)] for Genotype in Genotypes }}
-            self._DiNuList = [ GenotypesEncoder[Genotype] for Genotype in self._DiNuList ]
+            self._GenotypesEncoder = {**GenotypesEncoder, **{ alphabet.encode(Genotype[::-1]):GenotypesEncoder[alphabet.encode(Genotype)] for Genotype in Genotypes }}
+            self._DiNuList = [ self._GenotypesEncoder[Genotype] for Genotype in self._DiNuList ]
+            self._EncodeAdd = True
+    def decode_additive(self):
+        if self._EncodeAdd:
+            GenotypesDecoder = {Enc:Geno for Geno,Enc in self._GenotypesEncoder.items()}
+            self._DiNuList = [ GenotypesDecoder[Genotype] for Genotype in self._DiNuList ]
+            self._EncodeAdd = False
 
-    def read_mapped(InFile, EncodeAdd = False , Verbose = False):
+    def read_mapped(InFile, EncodeAdd = False , Verbose = False, Plink = True):
         MapList = []
         FamList = []
         MapLineCount = 0
         PedLineCount = 0
 
-        if not snp.has_plink():
+        if not snp.has_plink() or not Plink:
             if Verbose: print("\r[NO] Running PLINK for data transposition")
             if Verbose: print("\r[  ] Processing MAP-File",end="")
             InMapFile = open(InFile+".map","r")
@@ -341,6 +376,9 @@ class snp():
 
         if Verbose: print("\r[  ] Writing Output-PED-File (target: {})".format(OutFile+".ped"),end="")
         OutPedFile = open(OutFile+".ped","w")
+        for Snp in SnpList:
+            if Snp.is_additive_encoded():
+                Snp.decode_additive()
         for idx,AnimInfo in enumerate(FamList):
             OutPedFile.write(str(AnimInfo))
             for Snp in SnpList:

@@ -30,7 +30,7 @@ OutFilePrefix = "data"
 
 NTree = 500
 NThread = -1 #all!
-
+NFeature = "auto"
 
 
 
@@ -40,6 +40,7 @@ Parser = argparse.ArgumentParser(description='Finds for each SNP the importance 
 Parser.add_argument('--file', metavar='{File-Name-Prefix}', type=str, nargs=1, help='Input file prefix for <file>.map and <file>.ped, where a subset is taken from', required = True)
 Parser.add_argument('-n', metavar='<Sample-Set-Sizes>', type=int, nargs=1, help='Return the best n SNPs (per chromosome/genome)', required = True)
 Parser.add_argument('--tree', metavar='<Tree-Number>', type=int, nargs=1, help='Number of Trees used for random forest, default tree = {}'.format(NTree), required = False)
+Parser.add_argument('--features', metavar='<Feature-Number>', type=int, nargs=1, help='Number of feautures used for random forest, default features = {}'.format(NFeature), required = False)
 Parser.add_argument('-t', metavar='<Thread-Number>', type=int, nargs=1, help='Number threads to be used for the random forest, default tree = {} (all)'.format(NThread), required = False)
 Parser.add_argument('--omp', metavar='{MAP-Out-Name}', type=str, nargs=1, help='Output file name for <omp>.map and <omp>.ped for the n most important SNPs, default out = data.*', required = False)
 Parser.add_argument('--out', metavar='{Attribut-List}', type=str, nargs=1, help='Attribute importance list file name, default out = <file>.attr', required = False)
@@ -55,10 +56,10 @@ if Args.omp:
     OutFilePrefix = Args.omp[0]
 if Args.out:
     OutAttrFile = Args.out[0]
+if Args.features:
+    NFeature = Args.features[0]
 OnGenome = Args.genome
 EncodeAdditive = Args.enc
-
-
 
 
 
@@ -70,6 +71,8 @@ TopImpSnps = []
 
 if OnGenome:
     SnpIDs = [repr(Snp) for Snp in SnpList]
+    if NFeature != "auto":
+        NFeature = min(NFeature, len(SnpIDs))
 
     #--- Make Synthetic Data as mentioned by Leo Breiman for unsup. RF ------------#
     print("\r[  ] Creating synthetic Data using SNPs for random forest",end="")
@@ -79,7 +82,7 @@ if OnGenome:
 
     #--- Perform unsupervised random forest ---------------------------------------#
     print("\r[  ] Performing unsupervised random forest",end="")
-    SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread)
+    SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread, max_features = NFeature)
     SnpRfSynthClf.fit(SnpSynthRfData, SnpSynthRfLabel)
     print("\r[OK] Performing unsupervised random forest")
 
@@ -88,10 +91,11 @@ if OnGenome:
     #--- Calculate Variable importance and store ----------------------------------#
     print("\r[  ] Writing important attributes to file, sorted",end="")
     OutAttrFile = open(OutAttrFile, "w")
-    Importance = sorted( [ (ID,importance) for ID, importance in zip(SnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[1], reverse = True)
-    TopImpSnps = [ SnpList[ SnpIDs.index(SnpID[0]) ] for SnpID in Importance[1:TopSnps]]
+    OutAttrFile.write("ID\tVarImp\tConserv\tMAF\tEntropy\n")
+    Importance = sorted( [ (ID,importance,SnpList[idx].conservation(),SnpList[idx].maf(),SnpList[idx].entropy()) for idx,(ID,importance) in enumerate(zip(SnpIDs, SnpRfSynthClf.feature_importances_))], key=lambda x:x[1], reverse = True)
+    TopImpSnps = [ SnpList[ SnpIDs.index(SnpID[0]) ] for SnpID in Importance[0:TopSnps]]
     for Tup in Importance:
-        OutAttrFile.write("{}\t{}\n".format(Tup[0],Tup[1]))
+        OutAttrFile.write("{}\t{}\t{}\t{}\t{}\n".format(Tup[0],Tup[1],Tup[2],Tup[3],Tup[4]))
     OutAttrFile.close()
     print("\r[OK] Writing important attributes to file, sorted")
 
@@ -105,7 +109,10 @@ else:
         SubSnpList = [SnpList[Idx] for Idx,Chr in enumerate(SnpChrom) if Chr == Chrom]
         SubSnpIDs = [repr(Snp) for Snp in SubSnpList]
         SubTopSnps = min(TopSnps,len(SubSnpList))
-        
+        if NFeature != "auto":
+            SubNFeature = min(NFeature, len(SubSnpIDs))
+        else:
+            SubNFeature = "auto"
         #--- Make Synthetic Data as mentioned by Leo Breiman for unsup. RF ------------#
         print("\r[  ] Chromosome {}:{} [1/3]: Creating synthetic Data using SNPs for random forest".format(Chrom,ChromListLen),end="")
         SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SubSnpList)
@@ -113,20 +120,21 @@ else:
         #--- Perform unsupervised random forest ---------------------------------------#
         print("\r{}\r".format(" "*81),end="")
         print("\r[  ] Chromosome {}:{} [2/3]: Performing unsupervised random forest".format(Chrom,ChromListLen),end="")
-        SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread)
+        SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread, max_features = SubNFeature)
         SnpRfSynthClf.fit(SnpSynthRfData, SnpSynthRfLabel)
 
         print("\r{}\r".format(" "*81),end="")
         print("\r[  ] Chromosome {}:{} [3/3] Calculating and storing attribute importance".format(Chrom,ChromListLen),end="")
-        SubImportance = sorted( [ (ID,Chrom,Importance) for ID, Importance in zip(SubSnpIDs, SnpRfSynthClf.feature_importances_)], key=lambda x:x[2], reverse = True)
-        TopImpSnps.extend([ SubSnpList[ SubSnpIDs.index(SnpID[0]) ] for SnpID in SubImportance[1:SubTopSnps]])
+        SubImportance = sorted( [ (ID,Chrom,Importance,SubSnpList[idx].conservation(),SubSnpList[idx].maf(),SubSnpList[idx].entropy()) for idx, (ID, Importance) in enumerate(zip(SubSnpIDs, SnpRfSynthClf.feature_importances_))], key=lambda x:x[2], reverse = True)
+        TopImpSnps.extend([ SubSnpList[ SubSnpIDs.index(SnpID[0]) ] for SnpID in SubImportance[0:SubTopSnps]])
         Importance.extend(SubImportance)
         print("\r{}\r".format(" "*81),end="")
         print("\r[OK] Chromosome {}:{} unsupervised RF and attribute importance".format(Chrom,ChromListLen))
     print("\r[  ] Writing important attributes to file, sorted",end="")
     OutAttrFile = open(OutAttrFile, "w")
+    OutAttrFile.write("ID\tChrom\tVarImp\tConserv\tMAF\tEntropy\n")
     for Tup in Importance:
-        OutAttrFile.write("{}\t{}\t{}\n".format(Tup[0],Tup[1],Tup[2]))
+        OutAttrFile.write("{}\t{}\t{}\t{}\t{}\t{}\n".format(Tup[0],Tup[1],Tup[2],Tup[3],Tup[4],Tup[5]))
     OutAttrFile.close()
     print("\r[OK] Writing important attributes to file, sorted")
 
