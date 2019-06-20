@@ -125,7 +125,7 @@ class snpinfo():
                 + Delimiter + str(self._Distance) + str(Delimiter) \
                 + str(self._Position)
     def __repr__(self):
-        return repr(self._SNPID)
+        return str(self._SNPID)
 
     def __eq__(self, other):
         return self._SNPID == other._SNPID
@@ -210,21 +210,21 @@ class snp():
         self._DiNuList.count(DiNu)
     def conservation(self):
         if not self._GenotypesCounted:
-            self.genotypecount()
+            self.count_genotype()
         return max(self._GenotypesCount.values())/len(self)
     def maf(self):
         if not self._AlleleCounted:
-            self.allelcount()
+            self.count_allel()
         return min([self._AlleleCount[Allele] for Allele in self._Alleles])/(sum(self._AlleleCount.values()))
     def entropy(self):
         return sum([ -Geno/len(self)*math.log2(Geno/len(self)) for Geno in self._GenotypesCount.values() ])
-    def allelcount(self):
+    def count_allel(self):
         ReDo = False
         if self._EncodeAdd:
             self.decode_additive()
             ReDo = True
         if not self._GenotypesCounted:
-            self.genotypecount()
+            self.count_genotype()
         Alleles = {'A':0,'C':0,'G':0,'T':0, '0':0}
         for Genotyp in self._GenotypesCount:
             GenoStr = alphabet.decode(Genotyp)
@@ -236,10 +236,14 @@ class snp():
         if ReDo:
             self.encode_additive()
         return self._AlleleCount
-    def genotypecount(self):
+    def allelcount(self):
+        return self._AlleleCount
+    def count_genotype(self):
         self._GenotypesCount = Counter(self._DiNuList)
         self._Genotypes = [ Counts[0] for Counts in sorted(self._GenotypesCount.items(), key=lambda kv:kv[1], reverse=True) ]
         self._GenotypesCounted = True
+        return self._GenotypesCount
+    def genotypecount(self):
         return self._GenotypesCount
 
     def has_plink():
@@ -253,7 +257,7 @@ class snp():
     def encode_additive(self):
         if not self._EncodeAdd:
             if not self._AlleleCounted:
-                self.allelcount()
+                self.count_allel()
             Genotypes = ["".join(Genotype) for Genotype in combinations(self._Alleles,2)]
             GenotypesEncoder = {alphabet.encode(Genotype):(idx) for idx,Genotype in enumerate(Genotypes)}
             if self._AlleleCount['0'] != 0:
@@ -268,13 +272,53 @@ class snp():
             self._DiNuList = [ GenotypesDecoder[Genotype] for Genotype in self._DiNuList ]
             self._EncodeAdd = False
 
-    def read_mapped(InFile, EncodeAdd = False , Verbose = False, Plink = True):
+    def read_mapped(InFile, EncodeAdd = False , Verbose = False, Plink = True, TPed = False):
         MapList = []
         FamList = []
         MapLineCount = 0
         PedLineCount = 0
+        
+        if (snp.has_plink() and Plink) or TPed == True:
+            if not TPed:
+                if Verbose: print("\r[  ] Running PLINK for data transposition",end="")
+                InMapFile = open(InFile+".map","r")
+                Chrs = max([int(re.split('[\t\n ]+',Line.rstrip("\n"))[0]) for Line in InMapFile])
+                InMapFile.close()
+                subprocess.Popen(["plink", "--file" , InFile,"--chr-set", str(Chrs), "--recode", "transpose","--allow-no-sex", "--out", InFile], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()            
+                if Verbose: print("\r[OK] Running PLINK for data transposition")
 
-        if not snp.has_plink() or not Plink:
+            if Verbose: print("\r[  ] Processing TFAM-File",end="")
+            InTfamFile = open(InFile+".tfam","r")
+            for adx,Line in enumerate(InTfamFile):
+                if Verbose: print("\r[  ] Processing TFAM-File: line {}".format(adx),end="")
+                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+                if len(Entries) != 6 and Verbose:
+                    print(" !!WARNING!! Line {} in TFAM-File has wrong entry number!\n".format(idx)+Line)
+                FamList.append(animinfo(Entries[0],Entries[1],Entries[2],Entries[3],Entries[4],Entries[5]))
+                PedLineCount += 1
+            InTfamFile.close()
+            if Verbose: print("\r{}\r[OK] Processing TFAM-File".format(" "*80))
+
+            if Verbose: print("\r[  ] Processing TPED-File",end="")
+            InTpedFile = open(InFile+".tped","r")
+            SnpList = []
+            for adx,Line in enumerate(InTpedFile):
+                #if Verbose: print("\r[  ] Processing TPED-File: line {}".format(adx),end="")
+                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
+                if (len(Entries)-4)/2 != PedLineCount and Verbose:
+                    print(" !!WARNING!! Line {} has a different amount({}) of genotpyes than required({})!".format(adx,(len(Entries)-4)/2,PedLineCount))
+                    continue
+                SnpList.append(snp(snpinfo(int(Entries[0]),Entries[1],int(Entries[2]),int(Entries[3]))))
+                SnpList[adx].extend( [ alphabet.encode("{}{}".format(Entries[idx],Entries[idx+1])) for idx in range(4,len(Entries),2) ] )
+            InTpedFile.close()
+            if Verbose: print("\r{}\r[OK] Processing TPED-File".format(" "*80))
+
+            if EncodeAdd:
+                for idx in range(len(SnpList)):
+                    SnpList[idx].encode_additive()
+            return SnpList, FamList
+
+        else:
             if Verbose: print("\r[NO] Running PLINK for data transposition")
             if Verbose: print("\r[  ] Processing MAP-File",end="")
             InMapFile = open(InFile+".map","r")
@@ -305,62 +349,6 @@ class snp():
                 PedLineCount += 1 
             if Verbose: print("\r{}\r[OK] Processing PED-File".format(" "*80))
             InPedFile.close()
-            if EncodeAdd:
-                for idx in range(len(SnpList)):
-                    SnpList[idx].encode_additive()
-            return SnpList, FamList
-
-        else:
-            if Verbose: print("\r[  ] Running PLINK for data transposition",end="")
-            subprocess.Popen(["cp",InFile+".map",InFile+"_copy.map"]).communicate()
-            InMapFile = open(InFile+".map","r")
-            for Line in InMapFile:
-                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
-                if len(Entries) != 4 and Verbose:
-                    print(" !!WARNING!! Line {} in MAP-File has to many entries!\n".format(idx)+Line)
-                MapList.append(snpinfo(int(Entries[0]),Entries[1],int(Entries[2]),int(Entries[3])))
-            InMapFile.close()
-
-            SnpList = [snp(SnpInfo) for SnpInfo in MapList]
-            del MapList
-
-            OutMapFile = open(InFile+".map","w")
-            for Snp in SnpList:
-                SnpInfo = snpinfo(1,Snp.info().snp_id(),Snp.info().distance(),Snp.info().position())
-                OutMapFile.write(str(SnpInfo)+"\n")
-            OutMapFile.close()
-
-            subprocess.Popen(["plink", "--file" , InFile, "--recode", "transpose","--allow-no-sex", "--out", InFile], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()            
-            if Verbose: print("\r[OK] Running PLINK for data transposition")
-
-            if Verbose: print("\r[  ] Processing TFAM-File",end="")
-            InTfamFile = open(InFile+".tfam","r")
-            for adx,Line in enumerate(InTfamFile):
-                if Verbose: print("\r[  ] Processing TFAM-File: line {}".format(adx),end="")
-                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
-                if len(Entries) != 6 and Verbose:
-                    print(" !!WARNING!! Line {} in TFAM-File has wrong entry number!\n".format(idx)+Line)
-                FamList.append(animinfo(Entries[0],Entries[1],Entries[2],Entries[3],Entries[4],Entries[5]))
-                PedLineCount += 1
-            InTfamFile.close()
-            if Verbose: print("\r{}\r[OK] Processing TFAM-File".format(" "*80))
-
-            if Verbose: print("\r[  ] Processing TPED-File",end="")
-            InTpedFile = open(InFile+".tped","r")
-            for adx,Line in enumerate(InTpedFile):
-                #if Verbose: print("\r[  ] Processing TPED-File: line {}".format(adx),end="")
-                Entries = re.split('[\t\n ]+',Line.rstrip("\n"))
-                if (len(Entries)-4)/2 != PedLineCount and Verbose:
-                    print(" !!WARNING!! Line {} has a different amount({}) of genotpyes than required({})!".format(adx,(len(Entries)-4)/2,PedLineCount))
-                    continue
-                SnpList[adx].extend( [ alphabet.encode("{}{}".format(Entries[idx],Entries[idx+1])) for idx in range(4,len(Entries),2) ] )
-            InTpedFile.close()
-            if Verbose: print("\r{}\r[OK] Processing TPED-File".format(" "*80))
-
-            if Verbose: print("\r[  ] Removing data from PLINK transposition",end="")
-            subprocess.Popen(["mv",InFile+"_copy.map",InFile+".map"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()
-            subprocess.Popen(["rm" , InFile+".tfam",InFile+".tped"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).communicate()            
-            if Verbose: print("\r[OK] Removing data from PLINK transposition")
             if EncodeAdd:
                 for idx in range(len(SnpList)):
                     SnpList[idx].encode_additive()

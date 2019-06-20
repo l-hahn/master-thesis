@@ -1,0 +1,29 @@
+PLINK v1.90b6.9 64-bit (4 Mar 2019)
+Options in effect:
+  --allow-no-sex
+  --chr-set 1
+  --file data_out_fine
+  --out data_out_fine
+  --recode transpose
+
+Hostname: stud08
+Working directory: /Home/lhahn/Schreibtisch/Master/master-thesis/01_Feature-Selection/random-forest
+Start time: Thu Jun  6 14:40:45 2019
+
+Random number seed: 1559824845
+15835 MB RAM detected; reserving 7917 MB for main workspace.
+Scanning .ped file... done.
+Performing single-pass .bed write (450 variants, 1000 samples).
+--file: data_out_fine-temporary.bed + data_out_fine-temporary.bim +
+data_out_fine-temporary.fam written.
+450 variants loaded from .bim file.
+1000 samples (1000 males, 0 females) loaded from .fam.
+1000 phenotype values loaded from .fam.
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 1000 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+450 variants and 1000 samples pass filters and QC.
+Among remaining phenotypes, 500 are cases and 500 are controls.
+--recode transpose to data_out_fine.tped + data_out_fine.tfam ... done.
+
+End time: Thu Jun  6 14:40:45 2019

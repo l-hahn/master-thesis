@@ -1,0 +1,29 @@
+PLINK v1.90b6.9 64-bit (4 Mar 2019)
+Options in effect:
+  --allow-no-sex
+  --cow
+  --file data_1000-snps
+  --model
+
+Hostname: stud08
+Working directory: /Home/lhahn/Schreibtisch/Master/master-thesis/01_Feature-Selection/random-forest
+Start time: Thu Jun  6 15:53:47 2019
+
+Random number seed: 1559829227
+15835 MB RAM detected; reserving 7917 MB for main workspace.
+Scanning .ped file... done.
+Performing single-pass .bed write (1000 variants, 1151 cattle).
+--file: plink-temporary.bed + plink-temporary.bim + plink-temporary.fam
+written.
+1000 variants loaded from .bim file.
+1151 cattle (0 males, 0 females, 1151 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to plink.nosex .
+1151 phenotype values loaded from .fam.
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 1151 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+1000 variants and 1151 cattle pass filters and QC.
+Among remaining phenotypes, 592 are cases and 559 are controls.
+Writing --model report to plink.model ... done.
+
+End time: Thu Jun  6 15:53:47 2019

@@ -24,13 +24,13 @@ def BuildSnpUnsupRfData(SnpData):
 
 
 
-
 ###====== VARIABLES =========================================================###
 OutFilePrefix = "data"
 
 NTree = 500
 NThread = -1 #all!
 NFeature = "auto"
+Tped = False
 
 
 
@@ -45,7 +45,9 @@ Parser.add_argument('-t', metavar='<Thread-Number>', type=int, nargs=1, help='Nu
 Parser.add_argument('--omp', metavar='{MAP-Out-Name}', type=str, nargs=1, help='Output file name for <omp>.map and <omp>.ped for the n most important SNPs, default out = data.*', required = False)
 Parser.add_argument('--out', metavar='{Attribut-List}', type=str, nargs=1, help='Attribute importance list file name, default out = <file>.attr', required = False)
 Parser.add_argument('--genome', action="store_true", help='Calculate attribute importance on entire genome, not by chromosome', required = False)
+Parser.add_argument('--supervised', action="store_true", help='Consider in addition phenotyp for variable importance during random forest', required = False)
 Parser.add_argument('--enc', action="store_true", help='Each SNP will be additive encoded (0/1/2).', required = False)
+Parser.add_argument('--tped', action="store_true", help='Use existing <file>.tped and <file>.tfam file.', required = False)
 Args = Parser.parse_args()
 OutAttrFile = Args.file[0]+".attr"
 if Args.tree:
@@ -58,16 +60,19 @@ if Args.out:
     OutAttrFile = Args.out[0]
 if Args.features:
     NFeature = Args.features[0]
+Tped = Args.tped
 OnGenome = Args.genome
 EncodeAdditive = Args.enc
+Supervised = Args.supervised
 
 
 
 
 #--- Read SNP -----------------------------------------------------------------#
-SnpList, PedList = snp.read_mapped(Args.file[0], EncodeAdd = EncodeAdditive, Verbose=True)
+SnpList, PedList = snp.read_mapped(Args.file[0], EncodeAdd = EncodeAdditive, Verbose=True, TPed = Tped)
 TopSnps = min(max(Args.n[0],1),len(SnpList))
 TopImpSnps = []
+
 
 if OnGenome:
     SnpIDs = [repr(Snp) for Snp in SnpList]
@@ -75,10 +80,12 @@ if OnGenome:
         NFeature = min(NFeature, len(SnpIDs))
 
     #--- Make Synthetic Data as mentioned by Leo Breiman for unsup. RF ------------#
-    print("\r[  ] Creating synthetic Data using SNPs for random forest",end="")
-    SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SnpList)
-    print("\r[OK] Creating synthetic Data using SNPs for random forest")
-
+    if not Supervised:
+        print("\r[  ] Creating synthetic Data using SNPs for random forest",end="")
+        SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SnpList)
+        print("\r[OK] Creating synthetic Data using SNPs for random forest")
+    else:
+        SnpSynthRfData , SnpSynthRfLabel = np.array(SnpList).T, np.array([ Animal.phenotype() for Animal in PedList])
 
     #--- Perform unsupervised random forest ---------------------------------------#
     print("\r[  ] Performing unsupervised random forest",end="")
@@ -105,6 +112,8 @@ else:
     ChromList = sorted(list(set(SnpChrom)))
     ChromListLen = len(ChromList)
     Importance = []
+    if Supervised:
+        SnpSynthRfLabel = np.array([ Animal.phenotype() for Animal in PedList])
     for Chrom in ChromList:
         SubSnpList = [SnpList[Idx] for Idx,Chr in enumerate(SnpChrom) if Chr == Chrom]
         SubSnpIDs = [repr(Snp) for Snp in SubSnpList]
@@ -114,13 +123,15 @@ else:
         else:
             SubNFeature = "auto"
         #--- Make Synthetic Data as mentioned by Leo Breiman for unsup. RF ------------#
-        print("\r[  ] Chromosome {}:{} [1/3]: Creating synthetic Data using SNPs for random forest".format(Chrom,ChromListLen),end="")
-        SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SubSnpList)
-
+        if not Supervised:
+            print("\r[  ] Chromosome {}:{} [1/3]: Creating synthetic Data using SNPs for random forest".format(Chrom,ChromListLen),end="")
+            SnpSynthRfData , SnpSynthRfLabel = BuildSnpUnsupRfData(SubSnpList), np.array([ Animal.phenotype() for Animal in PedList])
+        else:
+            SnpSynthRfData = np.array(SubSnpList).T
         #--- Perform unsupervised random forest ---------------------------------------#
         print("\r{}\r".format(" "*81),end="")
         print("\r[  ] Chromosome {}:{} [2/3]: Performing unsupervised random forest".format(Chrom,ChromListLen),end="")
-        SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread, max_features = SubNFeature)
+        SnpRfSynthClf = RandomForestClassifier(n_estimators = NTree, n_jobs = NThread, max_features = SubNFeature, criterion="gini")
         SnpRfSynthClf.fit(SnpSynthRfData, SnpSynthRfLabel)
 
         print("\r{}\r".format(" "*81),end="")
